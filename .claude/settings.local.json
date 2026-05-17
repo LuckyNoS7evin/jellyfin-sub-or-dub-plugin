@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"D:\\\\git\\\\jellyfin-missing-episode-plugin\" -Recurse)",
+      "Bash(Select-Object -First 100)",
+      "Bash(Format-Table FullName)",
+      "Bash(Get-ChildItem -Path \"D:\\\\git\\\\jellyfin-sub-or-dub-plugin\" -Recurse -Force)",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"D:\\\\git\\\\jellyfin-specials-filter-plugin\" -Recurse -Force)",
+      "WebFetch(domain:luckynos7evin.github.io)",
+      "Bash(git -C \"D:\\\\git\\\\jellyfin-plugins\" log --oneline)",
+      "Bash(curl -s \"https://luckynos7evin.github.io/jellyfin-missing-episode-plugin/manifest.json\")",
+      "Bash(git -C \"D:\\\\git\\\\jellyfin-sub-or-dub-plugin\" log --oneline)",
+      "Bash(curl -s \"https://luckynos7evin.github.io/jellyfin-specials-filter-plugin/manifest.json\")"
+    ]
+  }
+}

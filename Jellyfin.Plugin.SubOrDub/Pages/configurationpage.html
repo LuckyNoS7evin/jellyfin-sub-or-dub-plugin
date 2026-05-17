@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+    <title>Sub or Dub</title>
+</head>
+<body>
+<div id="SubOrDubConfigPage" data-role="page" class="page type-interior pluginConfigurationPage">
+    <div data-role="content">
+        <div class="content-primary">
+            <div class="verticalSection verticalSection-extrabottompadding">
+                <div class="sectionTitleContainer flex align-items-center">
+                    <h2 class="sectionTitle">Sub or Dub</h2>
+                </div>
+                <p>
+                    Shows which foreign-language TV shows and movies are available dubbed, subbed, both, or not
+                    in your preferred language. Only content <em>not</em> originally in your language is shown.
+                </p>
+
+                <!-- Settings Section -->
+                <div class="verticalSection">
+                    <h3 class="sectionTitle" style="font-size:1.05em; margin-bottom:0.5em;">Settings</h3>
+                    <div class="inputContainer" style="max-width:320px; margin-bottom:1em;">
+                        <label for="languageSelect">Preferred Language:</label>
+                        <select id="languageSelect" is="emby-select" class="emby-select-withcolor emby-select">
+                            <option value="eng">English</option>
+                            <option value="jpn">Japanese</option>
+                            <option value="fra">French</option>
+                            <option value="deu">German</option>
+                            <option value="spa">Spanish</option>
+                            <option value="por">Portuguese</option>
+                            <option value="kor">Korean</option>
+                            <option value="zho">Chinese</option>
+                            <option value="ita">Italian</option>
+                            <option value="rus">Russian</option>
+                        </select>
+                    </div>
+                    <button is="emby-button" type="button" id="saveConfigBtn" class="raised button-submit block" style="max-width:200px;">
+                        <span>Save Settings</span>
+                    </button>
+                    <div id="saveConfigStatus" style="display:none; margin-top:0.75em; font-size:0.9em;"></div>
+                </div>
+
+                <!-- Scan Section -->
+                <div class="verticalSection" style="margin-top:2em;">
+                    <h3 class="sectionTitle" style="font-size:1.05em; margin-bottom:0.5em;">Scan</h3>
+                    <p id="lastScanText" style="opacity:0.75; font-size:0.9em; margin-bottom:0.75em;">Last scanned: never</p>
+                    <div id="languageMismatchWarning" style="display:none; background:rgba(255,152,0,0.12); border:1px solid rgba(255,152,0,0.4); border-radius:4px; padding:10px 14px; margin-bottom:1em; font-size:0.9em; color:#ff9800;">
+                        Cached results are for a different language. Run a new scan to update.
+                    </div>
+                    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <button is="emby-button" type="button" id="scanNowBtn" class="raised block" style="max-width:200px;">
+                            <span>Scan Now</span>
+                        </button>
+                        <div id="scanSpinner" style="display:none; font-size:0.9em; opacity:0.75;">Scanning&#8230; (results will appear when complete)</div>
+                    </div>
+                </div>
+
+                <!-- Filter Bar -->
+                <div class="verticalSection" style="margin-top:2em;">
+                    <h3 class="sectionTitle" style="font-size:1.05em; margin-bottom:0.75em;">Results</h3>
+                    <div style="display:flex; flex-wrap:wrap; gap:12px; margin-bottom:1em; align-items:flex-end;">
+                        <div class="inputContainer" style="min-width:160px; margin:0;">
+                            <label for="filterStatus" style="font-size:0.85em;">Status</label>
+                            <select id="filterStatus" is="emby-select" class="emby-select-withcolor emby-select">
+                                <option value="">All</option>
+                                <option value="Dubbed">Dubbed</option>
+                                <option value="Subbed">Subbed</option>
+                                <option value="Both">Both</option>
+                                <option value="NotAvailable">Not Available</option>
+                            </select>
+                        </div>
+                        <div class="inputContainer" style="min-width:160px; margin:0;">
+                            <label for="filterLibrary" style="font-size:0.85em;">Library</label>
+                            <select id="filterLibrary" is="emby-select" class="emby-select-withcolor emby-select">
+                                <option value="">All Libraries</option>
+                            </select>
+                        </div>
+                        <div class="inputContainer" style="min-width:140px; margin:0;">
+                            <label for="filterMediaType" style="font-size:0.85em;">Type</label>
+                            <select id="filterMediaType" is="emby-select" class="emby-select-withcolor emby-select">
+                                <option value="">All</option>
+                                <option value="Movie">Movies</option>
+                                <option value="Series">TV Shows</option>
+                            </select>
+                        </div>
+                        <div class="inputContainer" style="flex:1; min-width:180px; margin:0;">
+                            <label for="filterSearch" style="font-size:0.85em;">Search</label>
+                            <input type="text" id="filterSearch" is="emby-input" placeholder="Filter by name&#8230;" />
+                        </div>
+                    </div>
+
+                    <div id="resultsLoading" style="display:none;"><p>Loading&#8230;</p></div>
+                    <div id="noResults" style="display:none;"><p style="opacity:0.6; font-style:italic;">No results. Run a scan first.</p></div>
+                    <div id="resultsTableContainer" style="display:none;">
+                        <p id="resultCount" style="font-size:0.85em; opacity:0.7; margin-bottom:0.5em;"></p>
+                        <div class="sod-table-wrapper">
+                            <table class="sod-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th class="sod-col-type">Type</th>
+                                        <th class="sod-col-lang">Original Language</th>
+                                        <th class="sod-col-status">Status</th>
+                                        <th class="sod-col-lib">Library</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="resultsTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .sod-table-wrapper {
+            border: 1px solid #3a3a3a;
+            border-radius: 4px;
+            overflow: hidden;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .sod-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+        .sod-table thead tr {
+            background: rgba(255,255,255,0.06);
+            position: sticky;
+            top: 0;
+        }
+        .sod-table th {
+            text-align: left;
+            padding: 8px 12px;
+            font-size: 0.82em;
+            font-weight: 600;
+            opacity: 0.8;
+            border-bottom: 1px solid #3a3a3a;
+        }
+        .sod-table td {
+            padding: 7px 12px;
+            border-bottom: 1px solid #222;
+        }
+        .sod-table tr:last-child td { border-bottom: none; }
+        .sod-table tr:hover td { background: rgba(255,255,255,0.03); }
+        .sod-col-type   { width: 80px; }
+        .sod-col-lang   { width: 140px; }
+        .sod-col-status { width: 130px; }
+        .sod-col-lib    { width: 160px; }
+        .sod-badge {
+            display: inline-block;
+            font-size: 0.78em;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+        }
+        .sod-badge-dubbed        { background: rgba(76,175,80,0.18);  color: #4caf50; }
+        .sod-badge-subbed        { background: rgba(255,152,0,0.18);  color: #ff9800; }
+        .sod-badge-both          { background: rgba(33,150,243,0.18); color: #2196f3; }
+        .sod-badge-notavailable  { background: rgba(244,67,54,0.18);  color: #f44336; }
+        .sod-status-ok  { color: #4caf50; }
+        .sod-status-err { color: #f44336; }
+    </style>
+
+    <script type="text/javascript">
+    (function () {
+        var lastScanTime = null;
+        var scanPollInterval = null;
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function apiGet(path) {
+            return ApiClient.getJSON(ApiClient.getUrl(path));
+        }
+
+        function apiPost(path, body) {
+            return ApiClient.ajax({
+                type: 'POST',
+                url: ApiClient.getUrl(path),
+                data: JSON.stringify(body),
+                contentType: 'application/json'
+            });
+        }
+
+        // ── Config ────────────────────────────────────────────────────────────────
+
+        function loadConfig() {
+            apiGet('SubOrDub/Config').then(function (cfg) {
+                var sel = document.getElementById('languageSelect');
+                if (sel) sel.value = cfg.DefaultLanguage || 'eng';
+            }).catch(function (err) {
+                console.error('[SubOrDub] Failed to load config:', err);
+            });
+        }
+
+        function saveConfig() {
+            var lang = document.getElementById('languageSelect').value;
+            var statusEl = document.getElementById('saveConfigStatus');
+            statusEl.textContent = 'Saving…';
+            statusEl.className = '';
+            statusEl.style.display = '';
+
+            apiPost('SubOrDub/Config', { DefaultLanguage: lang })
+                .then(function () {
+                    statusEl.textContent = '✓ Settings saved.';
+                    statusEl.className = 'sod-status-ok';
+                    setTimeout(function () { statusEl.style.display = 'none'; }, 3000);
+                })
+                .catch(function (err) {
+                    console.error('[SubOrDub] Save failed:', err);
+                    statusEl.textContent = '✗ Failed to save.';
+                    statusEl.className = 'sod-status-err';
+                });
+        }
+
+        // ── Libraries ─────────────────────────────────────────────────────────────
+
+        function loadLibraries() {
+            apiGet('SubOrDub/Libraries').then(function (libs) {
+                var sel = document.getElementById('filterLibrary');
+                while (sel.options.length > 1) sel.remove(1);
+                (libs || []).forEach(function (lib) {
+                    var opt = document.createElement('option');
+                    opt.value = lib.Id;
+                    opt.textContent = lib.Name;
+                    sel.appendChild(opt);
+                });
+            }).catch(function (err) {
+                console.error('[SubOrDub] Failed to load libraries:', err);
+            });
+        }
+
+        // ── Results ───────────────────────────────────────────────────────────────
+
+        function loadResults() {
+            var status    = document.getElementById('filterStatus').value;
+            var libraryId = document.getElementById('filterLibrary').value;
+            var mediaType = document.getElementById('filterMediaType').value;
+            var search    = document.getElementById('filterSearch').value;
+
+            var params = [];
+            if (status)    params.push('status='    + encodeURIComponent(status));
+            if (libraryId) params.push('libraryId=' + encodeURIComponent(libraryId));
+            if (mediaType) params.push('mediaType=' + encodeURIComponent(mediaType));
+            if (search)    params.push('search='    + encodeURIComponent(search));
+
+            var url = 'SubOrDub/Results' + (params.length ? '?' + params.join('&') : '');
+
+            document.getElementById('resultsLoading').style.display = '';
+            document.getElementById('resultsTableContainer').style.display = 'none';
+            document.getElementById('noResults').style.display = 'none';
+
+            apiGet(url).then(function (response) {
+                document.getElementById('resultsLoading').style.display = 'none';
+
+                var mismatchEl = document.getElementById('languageMismatchWarning');
+                mismatchEl.style.display = response.LanguageMismatch ? '' : 'none';
+
+                if (!response.Data || response.Data.Results.length === 0) {
+                    document.getElementById('noResults').style.display = '';
+                    document.getElementById('lastScanText').textContent =
+                        response.Data
+                            ? 'Last scanned: ' + new Date(response.Data.LastScanTime).toLocaleString()
+                              + ' (language: ' + response.Data.ScannedLanguage + ')'
+                            : 'Last scanned: never';
+                    return;
+                }
+
+                lastScanTime = response.Data.LastScanTime;
+                document.getElementById('lastScanText').textContent =
+                    'Last scanned: ' + new Date(response.Data.LastScanTime).toLocaleString()
+                    + ' (language: ' + response.Data.ScannedLanguage + ')';
+
+                renderResults(response.Data.Results);
+            }).catch(function (err) {
+                document.getElementById('resultsLoading').style.display = 'none';
+                console.error('[SubOrDub] Failed to load results:', err);
+            });
+        }
+
+        function renderResults(results) {
+            var tbody = document.getElementById('resultsTableBody');
+            tbody.innerHTML = '';
+
+            results.forEach(function (item) {
+                var tr = document.createElement('tr');
+
+                var badgeClass = {
+                    'Dubbed':       'sod-badge sod-badge-dubbed',
+                    'Subbed':       'sod-badge sod-badge-subbed',
+                    'Both':         'sod-badge sod-badge-both',
+                    'NotAvailable': 'sod-badge sod-badge-notavailable'
+                }[item.Status] || 'sod-badge';
+
+                var badgeLabel = item.Status === 'NotAvailable' ? 'Not Available' : item.Status;
+
+                tr.innerHTML =
+                    '<td>' + escapeHtml(item.Name) + '</td>' +
+                    '<td class="sod-col-type">' + escapeHtml(item.MediaType) + '</td>' +
+                    '<td class="sod-col-lang">' + escapeHtml(item.OriginalLanguage) + '</td>' +
+                    '<td class="sod-col-status"><span class="' + badgeClass + '">' + escapeHtml(badgeLabel) + '</span></td>' +
+                    '<td class="sod-col-lib">' + escapeHtml(item.LibraryName) + '</td>';
+
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('resultCount').textContent = results.length + ' item(s) shown.';
+            document.getElementById('resultsTableContainer').style.display = '';
+        }
+
+        // ── Scan ──────────────────────────────────────────────────────────────────
+
+        function triggerScan() {
+            var btn     = document.getElementById('scanNowBtn');
+            var spinner = document.getElementById('scanSpinner');
+
+            btn.disabled = true;
+            spinner.style.display = '';
+
+            apiPost('SubOrDub/Scan', {}).then(function () {
+                if (scanPollInterval) clearInterval(scanPollInterval);
+                scanPollInterval = setInterval(function () {
+                    apiGet('SubOrDub/Results').then(function (response) {
+                        if (response.Data && response.Data.LastScanTime !== lastScanTime) {
+                            clearInterval(scanPollInterval);
+                            scanPollInterval = null;
+                            btn.disabled = false;
+                            spinner.style.display = 'none';
+                            loadResults();
+                        }
+                    }).catch(function () {});
+                }, 3000);
+            }).catch(function (err) {
+                console.error('[SubOrDub] Scan trigger failed:', err);
+                btn.disabled = false;
+                spinner.style.display = 'none';
+            });
+        }
+
+        // ── Init ──────────────────────────────────────────────────────────────────
+
+        document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
+        document.getElementById('scanNowBtn').addEventListener('click', triggerScan);
+
+        ['filterStatus', 'filterLibrary', 'filterMediaType'].forEach(function (id) {
+            document.getElementById(id).addEventListener('change', loadResults);
+        });
+
+        document.getElementById('filterSearch').addEventListener('input', function () {
+            if (this._debounce) clearTimeout(this._debounce);
+            this._debounce = setTimeout(loadResults, 300);
+        });
+
+        document.getElementById('SubOrDubConfigPage').addEventListener('pageshow', function () {
+            if (scanPollInterval) { clearInterval(scanPollInterval); scanPollInterval = null; }
+            lastScanTime = null;
+
+            document.getElementById('filterStatus').value = '';
+            document.getElementById('filterLibrary').value = '';
+            document.getElementById('filterMediaType').value = '';
+            document.getElementById('filterSearch').value = '';
+            document.getElementById('scanNowBtn').disabled = false;
+            document.getElementById('scanSpinner').style.display = 'none';
+            document.getElementById('languageMismatchWarning').style.display = 'none';
+
+            loadConfig();
+            loadLibraries();
+            loadResults();
+        });
+    })();
+    </script>
+</div>
+</body>
+</html>

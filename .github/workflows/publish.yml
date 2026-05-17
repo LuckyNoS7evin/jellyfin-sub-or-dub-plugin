@@ -1,0 +1,176 @@
+name: Publish Plugin
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      JELLYFIN_PLUGINS_DISPATCH_TOKEN: ${{ secrets.JELLYFIN_PLUGINS_DISPATCH_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Get metadata
+        id: meta
+        run: |
+          VERSION=$(grep -oP '(?<=<Version>)[^<]+' Jellyfin.Plugin.SubOrDub/Jellyfin.Plugin.SubOrDub.csproj)
+          TIMESTAMP=$(git log -1 --format="%cI")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "zip_name=sub-or-dub_${VERSION}.zip" >> $GITHUB_OUTPUT
+
+      - name: Build
+        run: dotnet build Jellyfin.Plugin.SubOrDub/Jellyfin.Plugin.SubOrDub.csproj -c Release
+
+      - name: Create meta.json
+        env:
+          CHANGELOG: ${{ github.event.head_commit.message }}
+        run: |
+          jq -n \
+            --arg category "General" \
+            --arg changelog "$CHANGELOG" \
+            --arg description "Shows which foreign-language TV shows and movies are available dubbed, subbed, both, or not in your preferred language." \
+            --arg guid "b5d7e8f9-1a2c-4b3d-8e9f-0a1b2c3d4e5f" \
+            --arg name "Sub or Dub" \
+            --arg overview "Shows which foreign-language TV shows and movies are available dubbed, subbed, both, or not in your preferred language." \
+            --arg owner "LuckyNoS7evin" \
+            --arg targetAbi "10.11.6.0" \
+            --arg timestamp "${{ steps.meta.outputs.timestamp }}" \
+            --arg version "${{ steps.meta.outputs.version }}" \
+            '{category: $category, changelog: $changelog, description: $description, guid: $guid, name: $name, overview: $overview, owner: $owner, targetAbi: $targetAbi, timestamp: $timestamp, version: $version}' \
+            > /tmp/meta.json
+
+      - name: Create zip
+        run: |
+          cd Jellyfin.Plugin.SubOrDub/bin/Release/net9.0/
+          zip "/tmp/${{ steps.meta.outputs.zip_name }}" Jellyfin.Plugin.SubOrDub.dll
+          zip -j "/tmp/${{ steps.meta.outputs.zip_name }}" /tmp/meta.json
+
+      - name: Compute checksum
+        id: checksum
+        run: |
+          echo "value=$(md5sum /tmp/${{ steps.meta.outputs.zip_name }} | awk '{print $1}')" >> $GITHUB_OUTPUT
+
+      - name: Deploy to gh-pages
+        env:
+          CHANGELOG: ${{ github.event.head_commit.message }}
+        run: |
+          BASE_URL="https://luckynos7evin.github.io/jellyfin-sub-or-dub-plugin"
+          VERSION="${{ steps.meta.outputs.version }}"
+          TIMESTAMP="${{ steps.meta.outputs.timestamp }}"
+          CHECKSUM="${{ steps.checksum.outputs.value }}"
+          ZIP_NAME="${{ steps.meta.outputs.zip_name }}"
+          ZIP_URL="$BASE_URL/releases/$ZIP_NAME"
+          GUID="b5d7e8f9-1a2c-4b3d-8e9f-0a1b2c3d4e5f"
+
+          NEW_VERSION=$(jq -n \
+            --arg v "$VERSION" \
+            --arg ts "$TIMESTAMP" \
+            --arg url "$ZIP_URL" \
+            --arg cs "$CHECKSUM" \
+            --arg cl "$CHANGELOG" \
+            '{version: $v, changelog: $cl, targetAbi: "10.11.6.0", sourceUrl: $url, checksum: $cs, timestamp: $ts}')
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin gh-pages; then
+            git checkout gh-pages
+            git pull origin gh-pages
+          else
+            git checkout --orphan gh-pages
+            git rm -rf . --quiet || true
+          fi
+
+          mkdir -p releases
+
+          if [ -f "releases/$ZIP_NAME" ]; then
+            echo "Release $ZIP_NAME already exists, skipping overwrite."
+            exit 0
+          fi
+
+          cp "/tmp/$ZIP_NAME" releases/
+
+          if [ ! -f manifest.json ]; then
+            echo '[]' > manifest.json
+          fi
+
+          jq \
+            --argjson ver "$NEW_VERSION" \
+            --arg guid "$GUID" \
+            --arg name "Sub or Dub" \
+            --arg desc "Shows which foreign-language TV shows and movies are available dubbed, subbed, both, or not in your preferred language." \
+            --arg owner "LuckyNoS7evin" \
+            --arg category "General" \
+            '
+            if (map(select(.guid == $guid)) | length) > 0 then
+              map(
+                if .guid == $guid then
+                  if ([.versions[] | select(.version == $ver.version)] | length) > 0 then
+                    .versions = [.versions[] | if .version == $ver.version then $ver else . end]
+                  else
+                    .versions = [$ver] + .versions
+                  end
+                else . end
+              )
+            else
+              . + [{
+                guid: $guid,
+                name: $name,
+                description: $desc,
+                overview: $desc,
+                owner: $owner,
+                category: $category,
+                imageUrl: "",
+                versions: [$ver]
+              }]
+            end
+            ' manifest.json > manifest.json.tmp && mv manifest.json.tmp manifest.json
+
+          git add manifest.json releases/
+          git diff --staged --quiet || git commit -m "Release $VERSION"
+          git push origin gh-pages
+
+      - name: Trigger central manifest update
+        if: ${{ env.JELLYFIN_PLUGINS_DISPATCH_TOKEN != '' }}
+        run: |
+          BASE_URL="https://luckynos7evin.github.io/jellyfin-sub-or-dub-plugin"
+          VERSION="${{ steps.meta.outputs.version }}"
+
+          echo "Waiting for GitHub Pages to serve version $VERSION..."
+          for i in $(seq 1 20); do
+            sleep 15
+            LIVE=$(curl -sf "$BASE_URL/manifest.json" 2>/dev/null \
+              | jq -r --arg v "$VERSION" '.[] | .versions[] | select(.version == $v) | .version' 2>/dev/null || echo "")
+            if [ -n "$LIVE" ]; then
+              echo "Version $VERSION is live after $((i * 15))s"
+              break
+            fi
+            echo "Attempt $i/20: version $VERSION not yet live, retrying..."
+          done
+
+          curl -X POST \
+            -H "Authorization: Bearer $JELLYFIN_PLUGINS_DISPATCH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/LuckyNoS7evin/jellyfin-plugins/dispatches \
+            -d '{"event_type":"plugin-published","client_payload":{"plugin":"sub-or-dub"}}'
