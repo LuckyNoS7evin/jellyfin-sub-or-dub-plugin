@@ -1,0 +1,21 @@
+[
+  {
+    "guid": "b5d7e8f9-1a2c-4b3d-8e9f-0a1b2c3d4e5f",
+    "name": "Sub or Dub",
+    "description": "Shows which foreign-language TV shows and movies are available dubbed, subbed, both, or not in your preferred language.",
+    "overview": "Shows which foreign-language TV shows and movies are available dubbed, subbed, both, or not in your preferred language.",
+    "owner": "LuckyNoS7evin",
+    "category": "General",
+    "imageUrl": "",
+    "versions": [
+      {
+        "version": "1.0.0.0",
+        "changelog": "new plugin initial commit",
+        "targetAbi": "10.11.6.0",
+        "sourceUrl": "https://luckynos7evin.github.io/jellyfin-sub-or-dub-plugin/releases/sub-or-dub_1.0.0.0.zip",
+        "checksum": "17f3c67dd62e806cd6d50aa2963771e6",
+        "timestamp": "2026-05-17T12:09:30+01:00"
+      }
+    ]
+  }
+]
