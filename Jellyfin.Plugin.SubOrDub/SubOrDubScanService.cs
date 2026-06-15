@@ -162,18 +162,15 @@ public class SubOrDubScanService
             return null;
         }
 
-        var originalLanguage = DetectOriginalLanguage(streams);
+        var originalLanguage = DetectOriginalLanguage(streams, preferredLanguage);
         if (string.IsNullOrEmpty(originalLanguage))
         {
             return null;
         }
 
-        if (string.Equals(originalLanguage, preferredLanguage, StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        var status = DetermineStatus(streams, preferredLanguage);
+        var status = string.Equals(originalLanguage, preferredLanguage, StringComparison.OrdinalIgnoreCase)
+            ? "InPreferredLanguage"
+            : DetermineStatus(streams, preferredLanguage);
 
         return new MediaLanguageInfo
         {
@@ -193,7 +190,7 @@ public class SubOrDubScanService
         Guid libraryId,
         string libraryName)
     {
-        var firstEpisode = _libraryManager.GetItemList(new InternalItemsQuery
+        var allEpisodes = _libraryManager.GetItemList(new InternalItemsQuery
         {
             IncludeItemTypes = [BaseItemKind.Episode],
             AncestorIds = [show.Id],
@@ -203,28 +200,79 @@ public class SubOrDubScanService
         .Where(e => e.ParentIndexNumber > 0)
         .OrderBy(e => e.ParentIndexNumber)
         .ThenBy(e => e.IndexNumber)
-        .FirstOrDefault();
+        .ToList();
 
-        if (firstEpisode is null)
+        if (allEpisodes.Count == 0)
         {
             _logger.LogDebug("[SubOrDub] No non-special episodes found for series '{Name}', skipping.", show.Name);
             return null;
         }
 
-        var probeResult = AnalyzeItem(firstEpisode, "Series", preferredLanguage, libraryId, libraryName);
-        if (probeResult is null)
+        _logger.LogDebug("[SubOrDub] Analyzing {Count} episodes for series '{Name}'.", allEpisodes.Count, show.Name);
+
+        // Analyze each episode once, keyed by episode so we can group by season
+        var episodeResults = allEpisodes
+            .Select(e => (Episode: e, Info: AnalyzeItem(e, "Episode", preferredLanguage, libraryId, libraryName)))
+            .Where(x => x.Info is not null)
+            .ToList();
+
+        if (episodeResults.Count == 0)
         {
             return null;
         }
 
-        // Use the series ID/name, not the probe episode's
+        var originalLanguage = episodeResults[0].Info!.OriginalLanguage;
+
+        var seasonBreakdown = episodeResults
+            .GroupBy(x => x.Episode.ParentIndexNumber ?? 0)
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var statuses = g.Select(x => x.Info!.Status).ToList();
+
+                if (statuses.Count == 0)
+                {
+                    return null;
+                }
+
+                var allPreferred = statuses.All(s => s == "InPreferredLanguage");
+                if (allPreferred)
+                {
+                    return new SeasonLanguageInfo { SeasonNumber = g.Key, Status = "InPreferredLanguage" };
+                }
+
+                var isDubbed = statuses.Any(s => s is "Dubbed" or "Both");
+                var isSubbed = statuses.Any(s => s is "Subbed" or "Both");
+                var seasonStatus = (isDubbed, isSubbed) switch
+                {
+                    (true, true) => "Both",
+                    (true, false) => "Dubbed",
+                    (false, true) => "Subbed",
+                    _ => "NotAvailable"
+                };
+
+                return new SeasonLanguageInfo { SeasonNumber = g.Key, Status = seasonStatus };
+            })
+            .Where(s => s is not null)
+            .Select(s => s!)
+            .ToList();
+
+        if (seasonBreakdown.Count == 0)
+        {
+            return null;
+        }
+
+        var distinctStatuses = seasonBreakdown.Select(s => s.Status).Distinct().ToList();
+        var overallStatus = distinctStatuses.Count == 1 ? distinctStatuses[0] : "Mixed";
+
         return new MediaLanguageInfo
         {
             Id = show.Id,
             Name = show.Name ?? string.Empty,
             MediaType = "Series",
-            OriginalLanguage = probeResult.OriginalLanguage,
-            Status = probeResult.Status,
+            OriginalLanguage = originalLanguage,
+            Status = overallStatus,
+            SeasonBreakdown = overallStatus == "Mixed" ? seasonBreakdown : null,
             LibraryId = libraryId,
             LibraryName = libraryName
         };
@@ -246,12 +294,21 @@ public class SubOrDubScanService
         }
     }
 
-    private static string DetectOriginalLanguage(IReadOnlyList<MediaStream> streams)
+    private static string DetectOriginalLanguage(IReadOnlyList<MediaStream> streams, string preferredLanguage)
     {
         var audioStreams = streams.Where(s => s.Type == MediaStreamType.Audio).ToList();
         if (audioStreams.Count == 0)
         {
             return string.Empty;
+        }
+
+        // Prefer a non-preferred-language track as the original — handles dubbed content where the
+        // preferred language is set as the default track (e.g. dubbed anime with English as default).
+        var nonPreferred = audioStreams.FirstOrDefault(s =>
+            !string.Equals(s.Language, preferredLanguage, StringComparison.OrdinalIgnoreCase));
+        if (nonPreferred is not null)
+        {
+            return nonPreferred.Language ?? string.Empty;
         }
 
         var primary = audioStreams.FirstOrDefault(s => s.IsDefault) ?? audioStreams[0];

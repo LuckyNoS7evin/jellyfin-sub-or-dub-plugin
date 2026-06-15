@@ -34,7 +34,7 @@ public class MediaLanguageInfo
 
     /// <summary>
     /// Gets or sets the availability status in the user's preferred language.
-    /// Values: "Dubbed", "Subbed", "Both", "NotAvailable".
+    /// Values: "Dubbed", "Subbed", "Both", "NotAvailable", "InPreferredLanguage", "Mixed".
     /// </summary>
     public string Status { get; set; } = string.Empty;
 
@@ -43,4 +43,19 @@ public class MediaLanguageInfo
 
     /// <summary>Gets or sets the display name of the library this item belongs to.</summary>
     public string LibraryName { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets per-season breakdown when seasons have differing statuses (Status == "Mixed").</summary>
+    public List<SeasonLanguageInfo>? SeasonBreakdown { get; set; }
+}
+
+/// <summary>
+/// Language availability for a single season within a series.
+/// </summary>
+public class SeasonLanguageInfo
+{
+    /// <summary>Gets or sets the season number.</summary>
+    public int SeasonNumber { get; set; }
+
+    /// <summary>Gets or sets the availability status for this season.</summary>
+    public string Status { get; set; } = string.Empty;
 }

@@ -12,8 +12,8 @@
                     <h2 class="sectionTitle">Sub or Dub</h2>
                 </div>
                 <p>
-                    Shows which foreign-language TV shows and movies are available dubbed, subbed, both, or not
-                    in your preferred language. Only content <em>not</em> originally in your language is shown.
+                    Shows all TV shows and movies with their availability in your preferred language.
+                    Content originally in your preferred language is shown as <em>In Preferred Language</em>.
                 </p>
 
                 <!-- Settings Section -->
@@ -67,6 +67,8 @@
                                 <option value="Subbed">Subbed</option>
                                 <option value="Both">Both</option>
                                 <option value="NotAvailable">Not Available</option>
+                                <option value="InPreferredLanguage">In Preferred Language</option>
+                                <option value="Mixed">Mixed</option>
                             </select>
                         </div>
                         <div class="inputContainer" style="min-width:160px; margin:0;">
@@ -159,10 +161,15 @@
             letter-spacing: 0.03em;
             white-space: nowrap;
         }
-        .sod-badge-dubbed        { background: rgba(76,175,80,0.18);  color: #4caf50; }
-        .sod-badge-subbed        { background: rgba(255,152,0,0.18);  color: #ff9800; }
-        .sod-badge-both          { background: rgba(33,150,243,0.18); color: #2196f3; }
-        .sod-badge-notavailable  { background: rgba(244,67,54,0.18);  color: #f44336; }
+        .sod-badge-dubbed              { background: rgba(76,175,80,0.18);   color: #4caf50; }
+        .sod-badge-subbed              { background: rgba(255,152,0,0.18);   color: #ff9800; }
+        .sod-badge-both                { background: rgba(33,150,243,0.18);  color: #2196f3; }
+        .sod-badge-notavailable        { background: rgba(244,67,54,0.18);   color: #f44336; }
+        .sod-badge-inpreferredlanguage { background: rgba(156,39,176,0.18);  color: #9c27b0; }
+        .sod-badge-mixed               { background: rgba(121,85,72,0.18);   color: #a1887f; cursor: pointer; user-select: none; }
+        .sod-badge-mixed:hover         { background: rgba(121,85,72,0.30); }
+        .sod-season-detail td          { background: rgba(255,255,255,0.02); padding: 6px 12px 10px 28px; }
+        .sod-season-list               { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
         .sod-status-ok  { color: #4caf50; }
         .sod-status-err { color: #f44336; }
     </style>
@@ -290,30 +297,77 @@
             });
         }
 
+        var STATUS_BADGE_CLASS = {
+            'Dubbed':             'sod-badge sod-badge-dubbed',
+            'Subbed':             'sod-badge sod-badge-subbed',
+            'Both':               'sod-badge sod-badge-both',
+            'NotAvailable':       'sod-badge sod-badge-notavailable',
+            'InPreferredLanguage':'sod-badge sod-badge-inpreferredlanguage',
+            'Mixed':              'sod-badge sod-badge-mixed'
+        };
+
+        var STATUS_LABEL = {
+            'NotAvailable':       'Not Available',
+            'InPreferredLanguage':'In Preferred Language'
+        };
+
+        function statusBadgeHtml(status, extra) {
+            var cls   = STATUS_BADGE_CLASS[status] || 'sod-badge';
+            var label = STATUS_LABEL[status] || status;
+            return '<span class="' + cls + '"' + (extra || '') + '>' + escapeHtml(label) + '</span>';
+        }
+
         function renderResults(results) {
             var tbody = document.getElementById('resultsTableBody');
             tbody.innerHTML = '';
 
             results.forEach(function (item) {
                 var tr = document.createElement('tr');
+                var hasBreakdown = item.Status === 'Mixed'
+                    && Array.isArray(item.SeasonBreakdown)
+                    && item.SeasonBreakdown.length > 0;
 
-                var badgeClass = {
-                    'Dubbed':       'sod-badge sod-badge-dubbed',
-                    'Subbed':       'sod-badge sod-badge-subbed',
-                    'Both':         'sod-badge sod-badge-both',
-                    'NotAvailable': 'sod-badge sod-badge-notavailable'
-                }[item.Status] || 'sod-badge';
-
-                var badgeLabel = item.Status === 'NotAvailable' ? 'Not Available' : item.Status;
+                var statusCell;
+                if (hasBreakdown) {
+                    statusCell = '<td class="sod-col-status">'
+                        + statusBadgeHtml('Mixed', ' title="Click to expand season detail"')
+                        + ' <span style="font-size:0.75em; opacity:0.6;">▾</span></td>';
+                } else {
+                    statusCell = '<td class="sod-col-status">' + statusBadgeHtml(item.Status) + '</td>';
+                }
 
                 tr.innerHTML =
                     '<td>' + escapeHtml(item.Name) + '</td>' +
                     '<td class="sod-col-type">' + escapeHtml(item.MediaType) + '</td>' +
                     '<td class="sod-col-lang">' + escapeHtml(item.OriginalLanguage) + '</td>' +
-                    '<td class="sod-col-status"><span class="' + badgeClass + '">' + escapeHtml(badgeLabel) + '</span></td>' +
+                    statusCell +
                     '<td class="sod-col-lib">' + escapeHtml(item.LibraryName) + '</td>';
 
                 tbody.appendChild(tr);
+
+                if (hasBreakdown) {
+                    var detailTr = document.createElement('tr');
+                    detailTr.className = 'sod-season-detail';
+                    detailTr.style.display = 'none';
+
+                    var seasonHtml = item.SeasonBreakdown.map(function (s) {
+                        return '<span style="white-space:nowrap; font-size:0.85em;">'
+                            + '<span style="opacity:0.65; margin-right:4px;">S' + s.SeasonNumber + '</span>'
+                            + statusBadgeHtml(s.Status)
+                            + '</span>';
+                    }).join('');
+
+                    detailTr.innerHTML =
+                        '<td colspan="5"><div class="sod-season-list">' + seasonHtml + '</div></td>';
+                    tbody.appendChild(detailTr);
+
+                    var indicator = tr.querySelector('.sod-col-status span:last-child');
+                    tr.querySelector('.sod-badge-mixed').addEventListener('click', function () {
+                        var open = detailTr.style.display !== 'none';
+                        detailTr.style.display = open ? 'none' : '';
+                        if (indicator) indicator.textContent = open ? '▾' : '▴';
+                    });
+                }
             });
 
             document.getElementById('resultCount').textContent = results.length + ' item(s) shown.';
