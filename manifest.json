@@ -9,6 +9,14 @@
     "imageUrl": "",
     "versions": [
       {
+        "version": "1.1.0.0",
+        "changelog": "feat: show all content, per-season status breakdown, and dubbed language detection fix\n\n- All library content is now included in scan results; items originally in\n  the preferred language are shown with an \"In Preferred Language\" badge\n  instead of being silently excluded\n- Fixed original-language detection for dubbed content where the preferred\n  language is set as the default audio track (e.g. English-dubbed anime)\n- Series now scan every episode rather than just the first; seasons with\n  differing availability are reported as \"Mixed\" with a clickable per-season\n  breakdown in the results table\n- Added SeasonLanguageInfo model and SeasonBreakdown field to MediaLanguageInfo\n- Bumped version to 1.1.0.0\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>",
+        "targetAbi": "10.11.6.0",
+        "sourceUrl": "https://luckynos7evin.github.io/jellyfin-sub-or-dub-plugin/releases/sub-or-dub_1.1.0.0.zip",
+        "checksum": "4464ac58f6a76cd8fea86caac310fe03",
+        "timestamp": "2026-06-15T17:45:12+01:00"
+      },
+      {
         "version": "1.0.0.0",
         "changelog": "new plugin initial commit",
         "targetAbi": "10.11.6.0",
